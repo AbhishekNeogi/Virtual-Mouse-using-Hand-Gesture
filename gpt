@@ -1,0 +1,72 @@
+import cv2
+import mediapipe as mp
+import numpy as np
+import time
+import win32api
+import pyautogui
+
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+
+video = cv2.VideoCapture(0)
+
+def virtual_mouse():
+    click_threshold = 10  # Adjust click threshold as needed
+    last_click_time = time.time()
+
+    with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) as hands:
+        while video.isOpened():
+            _, frame = video.read()
+            if frame is None:
+                break
+
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image = cv2.flip(image, 1)
+            image_height, image_width, _ = image.shape
+
+            results = hands.process(image)
+
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    for point in mp_hands.HandLandmark:
+                        normalized_landmark = hand_landmarks.landmark[point]
+                        pixel_coordinates_landmark = mp_drawing._normalized_to_pixel_coordinates(
+                            normalized_landmark.x, normalized_landmark.y, image_width, image_height)
+                        point = str(point)
+
+                        if point == 'HandLandmark.INDEX_FINGER_TIP':
+                            try:
+                                index_fingertip_x = int(pixel_coordinates_landmark[0])
+                                index_fingertip_y = int(pixel_coordinates_landmark[1])
+                                win32api.SetCursorPos((index_fingertip_x * 3, index_fingertip_y * 4))
+                            except Exception as e:
+                                print("Index capture failed:", e)
+
+                        elif point == 'HandLandmark.THUMB_TIP':
+                            try:
+                                thumb_fingertip_x = int(pixel_coordinates_landmark[0])
+                                thumb_fingertip_y = int(pixel_coordinates_landmark[1])
+                            except Exception as e:
+                                print("Thumb capture failed:", e)
+
+                    # Calculate distance between index fingertip and thumb fingertip
+                    try:
+                        dist = np.sqrt((index_fingertip_x - thumb_fingertip_x) ** 2 +
+                                       (index_fingertip_y - thumb_fingertip_y) ** 2)
+
+                        # Perform click if distance is within threshold and timeout has elapsed
+                        if dist <= click_threshold and time.time() - last_click_time > 0.5:
+                            pyautogui.click()
+                            last_click_time = time.time()
+                    except Exception as e:
+                        print("Click failed:", e)
+
+            cv2.imshow("Hand tracking", image)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    video.release()
+    cv2.destroyAllWindows()
+
+virtual_mouse()
